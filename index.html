@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#151e18">
+<title>Kasus-Snake · Latein-Minispiel</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --page: #151e18;
+    --panel: #202c23;
+    --line: #435345;
+    --text: #f5f2e5;
+    --muted: #bdccbc;
+    --green: #ccf28e;
+    --amber: #ffdb9b;
+    --pink: #ffc0b5;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(ellipse at 28% 0%, #26362a, var(--page) 55%);
+    color: var(--text);
+    font: 1rem/1.5 system-ui, sans-serif;
+  }
+  button { font: inherit; cursor: pointer; }
+  button:focus-visible, summary:focus-visible {
+    outline: 3px solid var(--amber);
+    outline-offset: 4px;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  [hidden] { display: none !important; }
+  .page { width: min(100% - 32px, 980px); margin: 0 auto; padding: 30px 0 20px; }
+  .eyebrow, .label {
+    color: var(--green);
+    font: 700 .72rem/1.4 var(--mono);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  header { margin-bottom: 22px; }
+  h1, h2, p { margin: 0; }
+  h1 {
+    margin: 4px 0 5px;
+    font: 800 clamp(2.4rem, 8vw, 4.4rem)/1 system-ui, sans-serif;
+    letter-spacing: -.075em;
+  }
+  h1 span { color: var(--green); }
+  header p { color: var(--muted); }
+  .layout { display: grid; grid-template: "game side" / minmax(0, 1fr) 258px; gap: 16px; align-items: start; }
+  .game, .side > section, .touch-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; }
+  .game { grid-area: game; padding: 12px; min-width: 0; }
+  .dashboard { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-bottom: 10px; }
+  .mission, .stats { background: #19231c; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+  .mission .label, .stats .label { display: block; }
+  .mission-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; }
+  #lemma { color: var(--green); font: 700 1.28rem/1.4 var(--mono); }
+  #target { font-weight: 650; }
+  .stats { display: flex; gap: 14px; }
+  .stats strong { font: 700 1.08rem/1.7 var(--mono); white-space: nowrap; }
+  .arena {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    border: 1px solid #536853;
+    border-radius: 10px;
+    background: #151f18;
+    --columns: 12;
+    --rows: 8;
+    --cell-x: calc(100% / var(--columns));
+    --cell-y: calc(100% / var(--rows));
+    aspect-ratio: var(--columns) / var(--rows);
+  }
+  .arena[data-playing="true"] { touch-action: none; user-select: none; }
+  .arena::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(to right, #344738 1px, transparent 1px),
+      linear-gradient(to bottom, #344738 1px, transparent 1px);
+    background-size: var(--cell-x) var(--cell-y);
+    opacity: .65;
+  }
+  .pieces { position: absolute; inset: 0; container-type: inline-size; }
+  .tile {
+    position: absolute;
+    top: calc(var(--y) * var(--cell-y));
+    left: calc(var(--x) * var(--cell-x));
+    width: var(--cell-x);
+    height: var(--cell-y);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    place-items: center;
+  }
+  .segment {
+    width: 74%;
+    height: 74%;
+    border-radius: 28%;
+    background: #92bf70;
+    box-shadow: inset 0 -3px #0002;
+  }
+  .head .segment {
+    position: relative;
+    background: var(--green);
+    width: 83%;
+    height: 83%;
+    rotate: var(--rotation);
+  }
+  .head .segment::before, .head .segment::after {
+    position: absolute;
+    right: 21%;
+    width: 12%;
+    aspect-ratio: 1;
+    content: "";
+    background: #1c2c1a;
+    border-radius: 50%;
+  }
+  .head .segment::before { top: 22%; }
+  .head .segment::after { bottom: 22%; }
+  .food {
+    display: grid;
+    place-items: center;
+    min-width: 82%;
+    padding: 1px 3px;
+    border: 1px solid #e4b773;
+    border-radius: 5px;
+    background: #4b3924;
+    color: #ffdfaa;
+    font: 750 clamp(.64rem, 1.95cqw, .98rem)/1.5 var(--mono);
+    white-space: nowrap;
+  }
+  .food-tile { z-index: 1; }
+  .food-tile[data-edge="left"] .food { justify-self: start; }
+  .food-tile[data-edge="right"] .food { justify-self: end; }
+  .overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    padding: 10px;
+    background: #0e1811b8;
+  }
+  .message {
+    width: min(100%, 325px);
+    padding: clamp(10px, 3vw, 22px);
+    text-align: center;
+    background: #222f24;
+    border: 1px solid #718963;
+    border-radius: 12px;
+    box-shadow: 0 12px 32px #0005;
+  }
+  .message[data-tone="error"] { border-color: #cc917e; }
+  .message[data-tone="error"] .label { color: var(--pink); }
+  .message h2 { margin: 3px 0 4px; font-size: clamp(1.1rem, 4vw, 1.7rem); line-height: 1.13; }
+  .message p { color: var(--muted); font-size: .9rem; line-height: 1.35; }
+  .primary {
+    margin-top: 12px;
+    padding: 7px 16px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: var(--green);
+    color: #182517;
+    font-weight: 800;
+  }
+  .primary:hover { background: #e0ffb3; }
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 10px; }
+  .toolbar button, .pad button {
+    border: 1px solid #586b57;
+    border-radius: 7px;
+    color: var(--text);
+    background: #2b3a2d;
+    font-weight: 650;
+    min-height: 39px;
+    padding: 4px 11px;
+  }
+  .toolbar button:hover:not(:disabled), .pad button:hover:not(:disabled) { background: #3b503c; }
+  #feedback { color: var(--muted); flex: 1 1 165px; font-size: .86rem; }
+  .touch-panel { display: none; grid-area: touch; }
+  .touch-panel p { color: var(--muted); font-size: .87rem; }
+  .pad { display: grid; grid-template-columns: repeat(3, 52px); gap: 5px; justify-content: center; }
+  .pad button { min-height: 50px; font-size: 1.25rem; touch-action: manipulation; }
+  .pad button:first-child { grid-column: 2; }
+  .pad button:nth-child(2) { grid-column: 1; }
+  .side { grid-area: side; display: grid; gap: 12px; }
+  .side > section { padding: 15px; }
+  .side h2 { margin: 3px 0 10px; font-size: 1.08rem; }
+  .side p, .side li { color: var(--muted); font-size: .91rem; }
+  .side strong { color: var(--text); }
+  .side ol { padding-left: 20px; margin: 0; }
+  .side li + li { margin-top: 7px; }
+  kbd { background: #19231c; border: 1px solid #576856; border-radius: 4px; padding: 1px 4px; font: 700 .81em var(--mono); }
+  .words { display: flex; flex-wrap: wrap; gap: 5px; padding: 0; margin: 0; list-style: none; }
+  .words li, .words li + li { color: var(--amber); border: 1px solid #68543a; border-radius: 5px; padding: 1px 6px; margin: 0; font-family: var(--mono); }
+  .scope { margin-top: 9px; }
+  footer { margin-top: 14px; color: var(--muted); font: .75rem/1.4 var(--mono); }
+  @media (any-pointer: coarse), (max-width: 750px) {
+    .layout { grid-template: "game touch" auto "game side" 1fr / minmax(0, 1fr) 235px; }
+    .touch-panel { display: grid; gap: 10px; padding: 12px; }
+  }
+  @media (max-width: 750px), (max-width: 1100px) and (orientation: portrait) {
+    .layout { grid-template: "game" "side" / minmax(0, 1fr); }
+    .side { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .side > section:first-child { grid-row: span 2; }
+  }
+  @media (max-width: 750px), (any-pointer: coarse) and (max-width: 1100px) and (orientation: portrait) {
+    .layout { grid-template: "game" "touch" "side" / minmax(0, 1fr); }
+    .touch-panel { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  }
+  @media (any-pointer: coarse) and (orientation: landscape) and (max-height: 700px) and (min-width: 751px) {
+    .page { padding-top: 13px; }
+    header { margin-bottom: 11px; }
+    h1 { font-size: 2.75rem; }
+    .layout { grid-template-columns: minmax(0, 1fr) 224px; }
+  }
+  @media (max-width: 480px) {
+    .page { width: calc(100% - 20px); padding-top: 19px; }
+    header { margin-bottom: 14px; }
+    .game { padding: 7px; }
+    .mission, .stats { padding: 6px 7px; }
+    .stats { gap: 7px; }
+    .stats .label, .mission .label { font-size: .62rem; }
+    .mission-line { gap: 0 5px; }
+    #target { font-size: .82rem; }
+    .pad { grid-template-columns: repeat(3, 46px); }
+    .pad button { min-height: 46px; }
+    .side { gap: 8px; }
+    .side > section { padding: 10px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="eyebrow">Latein · 5. Deklination</div>
+    <h1>Kasus<span>-Snake</span></h1>
+    <p>Finde die passende Wortform und lenke deine Schlange zu ihr.</p>
+  </header>
+
+  <main class="layout">
+    <section class="game" aria-label="Spiel">
+      <div class="dashboard">
+        <div class="mission" aria-live="polite" aria-atomic="true">
+          <span class="label">Gesuchte Form</span>
+          <div class="mission-line"><strong id="lemma" lang="la">—</strong><span id="target">Runde starten</span></div>
+        </div>
+        <div class="stats">
+          <div><span class="label">Richtig</span><strong id="score">0 / 5</strong></div>
+          <div><span class="label">Länge</span><strong id="length">3</strong></div>
+        </div>
+      </div>
+
+      <div class="arena" id="arena" role="group" aria-label="Spielfeld">
+        <div class="pieces" id="pieces" aria-hidden="true"></div>
+        <div class="overlay" id="overlay">
+          <div class="message" id="message">
+            <div class="label" id="message-label">Start</div>
+            <h2 id="message-title">Bereit für die Runde?</h2>
+            <p id="message-body">Sammle fünf richtige Formen.</p>
+            <button class="primary" id="action" type="button">Spielen</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <p id="feedback" role="status">Beim Start hast du kurz Zeit zum Lesen.</p>
+        <button id="pause" type="button" aria-keyshortcuts="P" disabled>Pause</button>
+        <button id="reset" type="button" disabled>Neustart</button>
+      </div>
+    </section>
+
+    <section class="touch-panel" aria-label="Touch-Steuerung">
+      <div>
+        <div class="label">Touch-Steuerung</div>
+        <p>Wische auf dem Spielfeld oder tippe auf die Pfeile.</p>
+      </div>
+      <div class="pad" role="group" aria-label="Richtungssteuerung">
+        <button type="button" data-direction="up" aria-label="Nach oben" disabled>↑</button>
+        <button type="button" data-direction="left" aria-label="Nach links" disabled>←</button>
+        <button type="button" data-direction="down" aria-label="Nach unten" disabled>↓</button>
+        <button type="button" data-direction="right" aria-label="Nach rechts" disabled>→</button>
+      </div>
+    </section>
+
+    <aside class="side" aria-label="Spielanleitung">
+      <section>
+        <div class="label">01 · Spielregeln</div>
+        <h2>So geht’s</h2>
+        <ol>
+          <li>Lies Grundform, Kasus und Numerus über dem Spielfeld.</li>
+          <li>Steuere auf die passende Form zu. <strong>Richtig +1</strong> Segment, <strong>falsch −1</strong> Segment.</li>
+          <li>Am Spielfeldrand kommst du gegenüber wieder heraus. Triffst du deinen eigenen Körper, endet die Runde.</li>
+          <li>Fünf richtige Bissen gewinnen die Runde.</li>
+        </ol>
+      </section>
+      <section>
+        <div class="label">02 · Steuerung</div>
+        <h2>Lenken &amp; pausieren</h2>
+        <p>Pfeiltasten, <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> oder die Tasten am Spielfeld. <kbd>P</kbd> pausiert.</p>
+      </section>
+      <section>
+        <div class="label">03 · Wortschatz</div>
+        <h2>Vier Wörter</h2>
+        <ul class="words" lang="la"><li>res</li><li>spes</li><li>dies</li><li>fides</li></ul>
+        <p class="scope"><i lang="la">fides</i> nur im Singular, <i lang="la">spes</i> im Plural nur im Nominativ und Akkusativ.</p>
+      </section>
+    </aside>
+  </main>
+  <footer>Rundenziel · 5 richtige Formen</footer>
+</div>
+<script>
+'use strict';
+
+// Übliche Schulformen in der Reihenfolge der Liste „cases“.
+const cases = ['Nominativ', 'Genitiv', 'Dativ', 'Akkusativ', 'Ablativ'];
+const paradigms = {
+  res:   { Singular: ['res', 'rei', 'rei', 'rem', 're'], Plural: ['res', 'rerum', 'rebus', 'res', 'rebus'] },
+  spes:  { Singular: ['spes', 'spei', 'spei', 'spem', 'spe'], Plural: ['spes', null, null, 'spes', null] },
+  dies:  { Singular: ['dies', 'diei', 'diei', 'diem', 'die'], Plural: ['dies', 'dierum', 'diebus', 'dies', 'diebus'] },
+  fides: { Singular: ['fides', 'fidei', 'fidei', 'fidem', 'fide'] }
+};
+const tasksByWord = Object.fromEntries(Object.entries(paradigms).map(([word, paradigm]) => [
+  word,
+  Object.entries(paradigm).flatMap(([number, forms]) =>
+    forms.flatMap((form, index) => form ? [{ word, number, caseName: cases[index], form }] : []))
+]));
+
+const width = 12;
+const height = 8;
+const goal = 5;
+const stepMs = 395;
+const readingMs = 1400;
+const directions = {
+  up: { x: 0, y: -1, angle: -90 }, down: { x: 0, y: 1, angle: 90 },
+  left: { x: -1, y: 0, angle: 180 }, right: { x: 1, y: 0, angle: 0 }
+};
+const keys = {
+  arrowup: 'up', arrowdown: 'down', arrowleft: 'left', arrowright: 'right',
+  w: 'up', s: 'down', a: 'left', d: 'right'
+};
+const ui = Object.fromEntries([
+  'lemma', 'target', 'score', 'length', 'arena', 'pieces', 'overlay', 'message',
+  'message-label', 'message-title', 'message-body', 'action', 'feedback', 'pause', 'reset'
+].map(id => [id, document.getElementById(id)]));
+const padButtons = [...document.querySelectorAll('[data-direction]')];
+
+let state = 'ready';
+let timer;
+let snake = initialSnake();
+let direction = directions.right;
+let queuedDirection = null;
+let score = 0;
+let deck = [];
+let task = null;
+let food = [];
+let swipe = null;
+
+function initialSnake() {
+  return Array.from({ length: 3 }, (_, i) => ({ x: width / 2 - i, y: height / 2 }));
+}
+
+function shuffled(items) {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+function makeDeck() {
+  const [pluralWord, extraWord] = shuffled(['res', 'dies']);
+  const firstFour = Object.entries(tasksByWord).map(([word, tasks]) => {
+    const pool = word === pluralWord ? tasks.filter(task => task.number === 'Plural') : tasks;
+    return shuffled(pool)[0];
+  });
+  const extra = shuffled(tasksByWord[extraWord].filter(task =>
+    !firstFour.some(picked => picked.word === task.word && picked.form === task.form)))[0];
+  return shuffled([...firstFour, extra]);
+}
+
+function same(a, b) { return a.x === b.x && a.y === b.y; }
+function move(cell, heading) {
+  return {
+    x: (cell.x + heading.x + width) % width,
+    y: (cell.y + heading.y + height) % height
+  };
+}
+function cellKey(cell) { return cell.y * width + cell.x; }
+
+function distance(a, b) {
+  const x = Math.abs(a.x - b.x);
+  const y = Math.abs(a.y - b.y);
+  return Math.min(x, width - x) + Math.min(y, height - y);
+}
+
+function placeFood() {
+  const head = snake[0];
+  const occupied = new Set(snake.map(cellKey));
+  const free = [];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const cell = { x, y };
+      if (!occupied.has(cellKey(cell))) free.push(cell);
+    }
+  }
+
+  // Halte mindestens einen Weg zur richtigen Form frei von Ablenkern.
+  const routes = [{ cell: head, path: [] }];
+  const visited = new Set(occupied);
+  for (const route of routes) {
+    for (const heading of Object.values(directions)) {
+      if (!route.path.length && heading.x === -direction.x && heading.y === -direction.y) continue;
+      const cell = move(route.cell, heading);
+      const key = cellKey(cell);
+      if (visited.has(key)) continue;
+      visited.add(key);
+      routes.push({ cell, path: [...route.path, key] });
+    }
+  }
+  const distant = routes.filter(route => route.path.length >= 3 && route.path.length <= 7);
+  const reachable = routes.slice(1);
+  const route = shuffled(distant.length ? distant : reachable)[0];
+  // Auch in einer Sackgasse bleiben drei gültige Optionen auf dem Spielfeld.
+  const correctCell = route ? route.cell : shuffled(free)[0];
+  const reserved = new Set(route ? route.path : [cellKey(correctCell)]);
+  const decoyCandidates = shuffled(free.filter(cell =>
+    !reserved.has(cellKey(cell)) && distance(cell, head) >= 2 && distance(cell, correctCell) >= 3));
+  const firstDecoy = decoyCandidates[0];
+  const decoyCells = [firstDecoy, decoyCandidates.find(cell => distance(cell, firstDecoy) >= 3)];
+  const decoys = shuffled([...new Set(tasksByWord[task.word].map(option => option.form))]
+    .filter(form => form !== task.form)).slice(0, 2);
+  food = [{ ...correctCell, form: task.form }, ...decoys.map((form, i) => ({ ...decoyCells[i], form }))];
+}
+
+function tile(cell, className, child) {
+  const element = document.createElement('div');
+  element.className = 'tile ' + className;
+  element.style.setProperty('--x', cell.x);
+  element.style.setProperty('--y', cell.y);
+  element.append(child);
+  return element;
+}
+
+function draw() {
+  const tiles = food.map(cell => {
+    const label = document.createElement('span');
+    label.className = 'food';
+    label.lang = 'la';
+    label.textContent = cell.form;
+    const element = tile(cell, 'food-tile', label);
+    if (cell.x === 0) element.dataset.edge = 'left';
+    if (cell.x === width - 1) element.dataset.edge = 'right';
+    return element;
+  });
+  snake.forEach((cell, index) => {
+    const segment = document.createElement('span');
+    segment.className = 'segment';
+    const element = tile(cell, index === 0 ? 'head' : '', segment);
+    if (index === 0) element.style.setProperty('--rotation', direction.angle + 'deg');
+    tiles.push(element);
+  });
+  ui.pieces.replaceChildren(...tiles);
+  ui.score.textContent = score + ' / ' + goal;
+  ui.length.textContent = snake.length;
+}
+
+function showTask() {
+  ui.lemma.textContent = task.word;
+  ui.target.textContent = task.caseName + ' · ' + task.number;
+  placeFood();
+  draw();
+}
+
+function updateControls() {
+  ui.arena.dataset.playing = String(state === 'running');
+  if (state !== 'running') swipe = null;
+  ui.pause.disabled = state !== 'running' && state !== 'paused';
+  ui.pause.textContent = state === 'paused' ? 'Weiter' : 'Pause';
+  ui.reset.disabled = state === 'ready';
+  for (const button of padButtons) button.disabled = state !== 'running';
+}
+
+function showOverlay(nextState, label, title, body, action, tone = '') {
+  clearTimeout(timer);
+  state = nextState;
+  ui.message.dataset.tone = tone;
+  ui['message-label'].textContent = label;
+  ui['message-title'].textContent = title;
+  ui['message-body'].textContent = body;
+  ui.action.textContent = action;
+  ui.overlay.hidden = false;
+  updateControls();
+  ui.action.focus({ preventScroll: true });
+}
+
+function run(delay = stepMs) {
+  clearTimeout(timer);
+  if (ui.overlay.contains(document.activeElement)) {
+    ui.arena.tabIndex = -1;
+    ui.arena.focus({ preventScroll: true });
+  }
+  state = 'running';
+  ui.overlay.hidden = true;
+  updateControls();
+  timer = setTimeout(tick, delay);
+}
+
+function startRound() {
+  snake = initialSnake();
+  direction = directions.right;
+  queuedDirection = null;
+  score = 0;
+  deck = makeDeck();
+  task = deck[0];
+  ui.feedback.textContent = 'Lies die Aufgabe und plane deinen Weg.';
+  showTask();
+  run(readingMs);
+}
+
+function changeDirection(name) {
+  if (state !== 'running' || queuedDirection) return;
+  const next = directions[name];
+  if (next === direction || (next.x === -direction.x && next.y === -direction.y)) return;
+  queuedDirection = next;
+}
+
+function togglePause() {
+  if (state === 'running') {
+    queuedDirection = null;
+    showOverlay('paused', 'Pause', 'Kurz durchatmen', 'Das Spielfeld bleibt stehen.', 'Weiterspielen');
+  } else if (state === 'paused') {
+    run(readingMs);
+  }
+}
+
+function describeForm(form) {
+  const matches = tasksByWord[task.word].filter(option => option.form === form);
+  return ['Singular', 'Plural'].flatMap(number => {
+    const names = matches.filter(option => option.number === number).map(option => option.caseName);
+    return names.length ? [names.join(' oder ') + ' ' + number] : [];
+  }).join(' sowie ');
+}
+
+function tick() {
+  if (state !== 'running') return;
+  direction = queuedDirection || direction;
+  queuedDirection = null;
+  const next = move(snake[0], direction);
+  const bite = food.find(cell => same(cell, next));
+  const grows = bite?.form === task.form;
+  // Bei einem normalen Zug zieht die Schwanzspitze aus ihrem Feld weg.
+  const body = grows ? snake : snake.slice(0, -1);
+  if (body.some(cell => same(cell, next))) {
+    const reason = 'Du hast den eigenen Körper getroffen.';
+    ui.feedback.textContent = reason;
+    showOverlay('lost', 'Runde beendet', 'Kollision!', reason + ' Richtig: ' + score + ' von ' + goal + '.', 'Neue Runde', 'error');
+    return;
+  }
+
+  snake.unshift(next);
+  if (!grows) snake.pop();
+
+  if (grows) {
+    score++;
+    ui.feedback.textContent = bite.form + ' war richtig. +1 Segment.';
+    if (score === goal) {
+      food = [];
+      draw();
+      showOverlay('won', 'Runde geschafft', 'Fünf richtige Bissen!', 'Du hast das Rundenziel erreicht.', 'Neue Runde');
+      return;
+    }
+    task = deck[score];
+    showTask();
+    timer = setTimeout(tick, readingMs);
+    return;
+  }
+
+  if (bite) {
+    snake.pop();
+    const explanation = bite.form + ' steht hier für ' + describeForm(bite.form) + '. Gesucht ist ' + task.form + '.';
+    ui.feedback.textContent = 'Falscher Bissen. −1 Segment.';
+    if (!snake.length) {
+      food = food.filter(cell => cell !== bite);
+      draw();
+      showOverlay('lost', 'Runde beendet', 'Kein Segment mehr', explanation, 'Neue Runde', 'error');
+      return;
+    }
+    placeFood();
+    draw();
+    showOverlay('mistake', '−1 Segment', 'Falscher Bissen', explanation, 'Erneut versuchen', 'error');
+    return;
+  }
+
+  draw();
+  timer = setTimeout(tick, stepMs);
+}
+
+ui.action.addEventListener('click', () => {
+  if (state === 'paused' || state === 'mistake') {
+    if (state === 'mistake') ui.feedback.textContent = 'Die Aufgabe bleibt dieselbe.';
+    run(readingMs);
+  } else {
+    startRound();
+  }
+});
+ui.pause.addEventListener('click', togglePause);
+ui.reset.addEventListener('click', startRound);
+for (const button of padButtons) {
+  button.addEventListener('click', () => changeDirection(button.dataset.direction));
+}
+ui.arena.addEventListener('pointerdown', event => {
+  if (state !== 'running' || event.pointerType === 'mouse' || !event.isPrimary) return;
+  swipe = { id: event.pointerId, x: event.clientX, y: event.clientY };
+  ui.arena.setPointerCapture(event.pointerId);
+});
+ui.arena.addEventListener('pointermove', event => {
+  if (swipe?.id !== event.pointerId) return;
+  const dx = event.clientX - swipe.x;
+  const dy = event.clientY - swipe.y;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < 18) return;
+  const horizontal = Math.abs(dx) >= Math.abs(dy);
+  changeDirection(horizontal ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+  swipe = null;
+});
+for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+  ui.arena.addEventListener(name, event => {
+    if (swipe?.id === event.pointerId) swipe = null;
+  });
+}
+document.addEventListener('keydown', event => {
+  if (event.altKey || event.ctrlKey || event.metaKey) return;
+  const key = event.key.toLowerCase();
+  if (Object.hasOwn(keys, key) && state === 'running') {
+    event.preventDefault();
+    changeDirection(keys[key]);
+  }
+  if (key === 'p' && !event.repeat) togglePause();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && state === 'running') togglePause();
+});
+draw();
+</script>
+</body>
+</html>
