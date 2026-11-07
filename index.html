@@ -52,6 +52,21 @@
   .layout { display: grid; grid-template: "game side" / minmax(0, 1fr) 258px; gap: 16px; align-items: start; }
   .game, .side > section, .touch-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; }
   .game { grid-area: game; padding: 12px; min-width: 0; }
+  .mode-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-bottom: 10px; }
+  .modes { display: flex; flex-wrap: wrap; gap: 5px; }
+  .modes button {
+    min-height: 42px;
+    padding: 4px 12px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: #19231c;
+    color: var(--muted);
+    font-weight: 700;
+    touch-action: manipulation;
+  }
+  .modes button:hover { border-color: var(--green); }
+  .modes button[aria-pressed="true"] { background: var(--green); color: #182517; }
+  #mode-detail { color: var(--muted); font-size: .85rem; }
   .dashboard { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-bottom: 10px; }
   .mission, .stats { background: #19231c; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
   .mission .label, .stats .label { display: block; }
@@ -60,6 +75,7 @@
   #target { font-weight: 650; }
   .stats { display: flex; gap: 14px; }
   .stats strong { font: 700 1.08rem/1.7 var(--mono); white-space: nowrap; }
+  #points { color: var(--amber); }
   .arena {
     position: relative;
     overflow: hidden;
@@ -157,6 +173,7 @@
   .message[data-tone="error"] .label { color: var(--pink); }
   .message h2 { margin: 3px 0 4px; font-size: clamp(1.1rem, 4vw, 1.7rem); line-height: 1.13; }
   .message p { color: var(--muted); font-size: .9rem; line-height: 1.35; }
+  .message .result { margin-top: 8px; color: var(--amber); font-weight: 750; }
   .primary {
     margin-top: 12px;
     padding: 7px 16px;
@@ -205,6 +222,7 @@
     .layout { grid-template: "game" "side" / minmax(0, 1fr); }
     .side { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .side > section:first-child { grid-row: span 2; }
+    .side > section:last-child { grid-column: 1 / -1; }
   }
   @media (max-width: 750px), (any-pointer: coarse) and (max-width: 1100px) and (orientation: portrait) {
     .layout { grid-template: "game" "touch" "side" / minmax(0, 1fr); }
@@ -220,8 +238,9 @@
     .page { width: calc(100% - 20px); padding-top: 19px; }
     header { margin-bottom: 14px; }
     .game { padding: 7px; }
+    .dashboard { grid-template-columns: minmax(0, 1fr); }
     .mission, .stats { padding: 6px 7px; }
-    .stats { gap: 7px; }
+    .stats { justify-content: space-between; gap: 7px; }
     .stats .label, .mission .label { font-size: .62rem; }
     .mission-line { gap: 0 5px; }
     #target { font-size: .82rem; }
@@ -242,6 +261,13 @@
 
   <main class="layout">
     <section class="game" aria-label="Spiel">
+      <div class="mode-bar">
+        <div class="modes" role="group" aria-label="Schwierigkeitsgrad">
+          <button type="button" data-mode="standard" aria-pressed="true">Standard</button>
+          <button type="button" data-mode="hard" aria-pressed="false">Schwierig</button>
+        </div>
+        <p id="mode-detail" aria-live="polite">5 richtige Bissen · 3 Formen zur Auswahl</p>
+      </div>
       <div class="dashboard">
         <div class="mission" aria-live="polite" aria-atomic="true">
           <span class="label">Gesuchte Form</span>
@@ -250,6 +276,8 @@
         <div class="stats">
           <div><span class="label">Richtig</span><strong id="score">0 / 5</strong></div>
           <div><span class="label">Länge</span><strong id="length">3</strong></div>
+          <div><span class="label">Punkte</span><strong id="points">0</strong></div>
+          <div><span class="label">Bestwert</span><strong id="best">0</strong></div>
         </div>
       </div>
 
@@ -260,6 +288,7 @@
             <div class="label" id="message-label">Start</div>
             <h2 id="message-title">Bereit für die Runde?</h2>
             <p id="message-body">Sammle fünf richtige Formen.</p>
+            <p class="result" id="message-result" hidden></p>
             <button class="primary" id="action" type="button">Spielen</button>
           </div>
         </div>
@@ -293,7 +322,7 @@
           <li>Lies Grundform, Kasus und Numerus über dem Spielfeld.</li>
           <li>Steuere auf die passende Form zu. <strong>Richtig +1</strong> Segment, <strong>falsch −1</strong> Segment.</li>
           <li>Am Spielfeldrand kommst du gegenüber wieder heraus. Triffst du deinen eigenen Körper, endet die Runde.</li>
-          <li>Fünf richtige Bissen gewinnen die Runde.</li>
+          <li>Standard braucht fünf richtige Bissen. Schwierig braucht zehn, bietet vier Formen und wird nach jedem Treffer schneller.</li>
         </ol>
       </section>
       <section>
@@ -307,9 +336,15 @@
         <ul class="words" lang="la"><li>res</li><li>spes</li><li>dies</li><li>fides</li></ul>
         <p class="scope"><i lang="la">fides</i> nur im Singular, <i lang="la">spes</i> im Plural nur im Nominativ und Akkusativ.</p>
       </section>
+      <section>
+        <div class="label">04 · Wettbewerb</div>
+        <h2>Punkte &amp; Bestwert</h2>
+        <p>Ein richtiger Bissen gibt <strong>100 Punkte</strong>. Ab dem zweiten Treffer in Serie gibt es zusätzlich 10, dann 20, 30 und schließlich jeweils 40 Bonuspunkte.</p>
+        <p class="scope">Ein falscher Bissen kostet 40 Punkte und unterbricht die Serie. Der Bestwert zählt pro Modus und wird in diesem Browser gespeichert.</p>
+      </section>
     </aside>
   </main>
-  <footer>Rundenziel · 5 richtige Formen</footer>
+  <footer>5. Deklination · 4 Wörter</footer>
 </div>
 <script>
 'use strict';
@@ -330,9 +365,16 @@ const tasksByWord = Object.fromEntries(Object.entries(paradigms).map(([word, par
 
 const width = 12;
 const height = 8;
-const goal = 5;
-const stepMs = 395;
-const readingMs = 1400;
+const modes = {
+  standard: { goal: 5, choices: 3, stepMs: 395, accelerationMs: 0, readingMs: 1400 },
+  hard: { goal: 10, choices: 4, stepMs: 325, accelerationMs: 12, readingMs: 1000 }
+};
+const pointsPerBite = 100;
+const mistakePenalty = 40;
+const streakStep = 10;
+const maxStreakBonus = 40;
+const startDelayMs = 1400;
+const records = { standard: 0, hard: 0 };
 const directions = {
   up: { x: 0, y: -1, angle: -90 }, down: { x: 0, y: 1, angle: 90 },
   left: { x: -1, y: 0, angle: 180 }, right: { x: 1, y: 0, angle: 0 }
@@ -342,17 +384,22 @@ const keys = {
   w: 'up', s: 'down', a: 'left', d: 'right'
 };
 const ui = Object.fromEntries([
-  'lemma', 'target', 'score', 'length', 'arena', 'pieces', 'overlay', 'message',
-  'message-label', 'message-title', 'message-body', 'action', 'feedback', 'pause', 'reset'
+  'lemma', 'target', 'score', 'length', 'points', 'best', 'mode-detail', 'arena', 'pieces', 'overlay', 'message',
+  'message-label', 'message-title', 'message-body', 'message-result', 'action', 'feedback', 'pause', 'reset'
 ].map(id => [id, document.getElementById(id)]));
 const padButtons = [...document.querySelectorAll('[data-direction]')];
+const modeButtons = [...document.querySelectorAll('[data-mode]')];
 
 let state = 'ready';
+let modeKey = 'standard';
+let mode = modes[modeKey];
 let timer;
 let snake = initialSnake();
 let direction = directions.right;
 let queuedDirection = null;
 let score = 0;
+let points = 0;
+let streak = 0;
 let deck = [];
 let task = null;
 let food = [];
@@ -373,13 +420,18 @@ function shuffled(items) {
 
 function makeDeck() {
   const [pluralWord, extraWord] = shuffled(['res', 'dies']);
-  const firstFour = Object.entries(tasksByWord).map(([word, tasks]) => {
-    const pool = word === pluralWord ? tasks.filter(task => task.number === 'Plural') : tasks;
-    return shuffled(pool)[0];
-  });
-  const extra = shuffled(tasksByWord[extraWord].filter(task =>
-    !firstFour.some(picked => picked.word === task.word && picked.form === task.form)))[0];
-  return shuffled([...firstFour, extra]);
+  const words = Object.keys(tasksByWord);
+  const hard = modeKey === 'hard';
+  const order = hard ? [...words, ...words, extraWord, pluralWord] : [...words, extraWord];
+  const picks = [];
+  for (const word of order) {
+    const previous = picks.filter(task => task.word === word);
+    const forcePlural = !previous.length && (word === pluralWord || (hard && word === extraWord));
+    const pool = tasksByWord[word].filter(task =>
+      (!forcePlural || task.number === 'Plural') && !previous.some(picked => picked.form === task.form));
+    picks.push(shuffled(pool)[0]);
+  }
+  return shuffled(picks);
 }
 
 function same(a, b) { return a.x === b.x && a.y === b.y; }
@@ -424,15 +476,18 @@ function placeFood() {
   const distant = routes.filter(route => route.path.length >= 3 && route.path.length <= 7);
   const reachable = routes.slice(1);
   const route = shuffled(distant.length ? distant : reachable)[0];
-  // Auch in einer Sackgasse bleiben drei gültige Optionen auf dem Spielfeld.
+  // Auch in einer Sackgasse bleiben die Optionen auf dem Spielfeld.
   const correctCell = route ? route.cell : shuffled(free)[0];
   const reserved = new Set(route ? route.path : [cellKey(correctCell)]);
   const decoyCandidates = shuffled(free.filter(cell =>
     !reserved.has(cellKey(cell)) && distance(cell, head) >= 2 && distance(cell, correctCell) >= 3));
-  const firstDecoy = decoyCandidates[0];
-  const decoyCells = [firstDecoy, decoyCandidates.find(cell => distance(cell, firstDecoy) >= 3)];
   const decoys = shuffled([...new Set(tasksByWord[task.word].map(option => option.form))]
-    .filter(form => form !== task.form)).slice(0, 2);
+    .filter(form => form !== task.form)).slice(0, mode.choices - 1);
+  const decoyCells = [];
+  for (const cell of decoyCandidates) {
+    if (decoyCells.every(other => distance(cell, other) >= 3)) decoyCells.push(cell);
+    if (decoyCells.length === decoys.length) break;
+  }
   food = [{ ...correctCell, form: task.form }, ...decoys.map((form, i) => ({ ...decoyCells[i], form }))];
 }
 
@@ -464,8 +519,10 @@ function draw() {
     tiles.push(element);
   });
   ui.pieces.replaceChildren(...tiles);
-  ui.score.textContent = score + ' / ' + goal;
+  ui.score.textContent = score + ' / ' + mode.goal;
   ui.length.textContent = snake.length;
+  ui.points.textContent = Math.max(0, points);
+  ui.best.textContent = records[modeKey];
 }
 
 function showTask() {
@@ -491,13 +548,45 @@ function showOverlay(nextState, label, title, body, action, tone = '') {
   ui['message-label'].textContent = label;
   ui['message-title'].textContent = title;
   ui['message-body'].textContent = body;
+  ui['message-result'].hidden = true;
   ui.action.textContent = action;
   ui.overlay.hidden = false;
   updateControls();
   ui.action.focus({ preventScroll: true });
 }
 
-function run(delay = stepMs) {
+function recordKey() { return 'kasus-snake:best:' + modeKey; }
+
+function refreshBest() {
+  try {
+    const saved = Number(localStorage.getItem(recordKey()));
+    if (Number.isSafeInteger(saved) && saved > records[modeKey]) records[modeKey] = saved;
+  } catch {
+    // Bei gesperrtem Browserspeicher bleibt der Bestwert bis zum Schließen des Spiels sichtbar.
+  }
+  ui.best.textContent = records[modeKey];
+}
+
+function finishRound(nextState, title, body) {
+  const total = Math.max(0, points);
+  refreshBest();
+  const newRecord = total > records[modeKey];
+  if (newRecord) {
+    records[modeKey] = total;
+    ui.best.textContent = total;
+    try {
+      localStorage.setItem(recordKey(), String(total));
+    } catch {
+      // Der Bestwert bleibt im laufenden Spiel verfügbar.
+    }
+  }
+  const won = nextState === 'won';
+  showOverlay(nextState, won ? 'Runde geschafft' : 'Runde beendet', title, body, 'Neue Runde', won ? '' : 'error');
+  ui['message-result'].textContent = (newRecord ? 'Neuer Bestwert · ' : '') + total + ' Punkte';
+  ui['message-result'].hidden = false;
+}
+
+function run(delay) {
   clearTimeout(timer);
   if (ui.overlay.contains(document.activeElement)) {
     ui.arena.tabIndex = -1;
@@ -509,16 +598,38 @@ function run(delay = stepMs) {
   timer = setTimeout(tick, delay);
 }
 
-function startRound() {
+function resetRound() {
   snake = initialSnake();
   direction = directions.right;
   queuedDirection = null;
   score = 0;
+  points = 0;
+  streak = 0;
+  food = [];
+  refreshBest();
+}
+
+function selectMode(key) {
+  if (key === modeKey) return;
+  modeKey = key;
+  mode = modes[key];
+  resetRound();
+  for (const button of modeButtons) button.setAttribute('aria-pressed', String(button.dataset.mode === key));
+  ui['mode-detail'].textContent = mode.goal + ' richtige Bissen · ' + mode.choices + ' Formen zur Auswahl';
+  ui.lemma.textContent = '—';
+  ui.target.textContent = 'Runde starten';
+  ui.feedback.textContent = 'Beim Start hast du kurz Zeit zum Lesen.';
+  draw();
+  showOverlay('ready', 'Start', 'Bereit für die Runde?', 'Sammle ' + mode.goal + ' richtige Formen.', 'Spielen');
+}
+
+function startRound() {
+  resetRound();
   deck = makeDeck();
   task = deck[0];
   ui.feedback.textContent = 'Lies die Aufgabe und plane deinen Weg.';
   showTask();
-  run(readingMs);
+  run(startDelayMs);
 }
 
 function changeDirection(name) {
@@ -533,7 +644,7 @@ function togglePause() {
     queuedDirection = null;
     showOverlay('paused', 'Pause', 'Kurz durchatmen', 'Das Spielfeld bleibt stehen.', 'Weiterspielen');
   } else if (state === 'paused') {
-    run(readingMs);
+    run(startDelayMs);
   }
 }
 
@@ -557,7 +668,7 @@ function tick() {
   if (body.some(cell => same(cell, next))) {
     const reason = 'Du hast den eigenen Körper getroffen.';
     ui.feedback.textContent = reason;
-    showOverlay('lost', 'Runde beendet', 'Kollision!', reason + ' Richtig: ' + score + ' von ' + goal + '.', 'Neue Runde', 'error');
+    finishRound('lost', 'Kollision!', reason + ' Richtig: ' + score + ' von ' + mode.goal + '.');
     return;
   }
 
@@ -566,49 +677,58 @@ function tick() {
 
   if (grows) {
     score++;
-    ui.feedback.textContent = bite.form + ' war richtig. +1 Segment.';
-    if (score === goal) {
+    const bonus = Math.min(streak * streakStep, maxStreakBonus);
+    const earned = pointsPerBite + bonus;
+    points += earned;
+    streak++;
+    ui.feedback.textContent = bite.form + ' war richtig. +' + earned + ' Punkte' + (bonus ? ' mit Serienbonus.' : '.');
+    if (score === mode.goal) {
       food = [];
       draw();
-      showOverlay('won', 'Runde geschafft', 'Fünf richtige Bissen!', 'Du hast das Rundenziel erreicht.', 'Neue Runde');
+      finishRound('won', 'Rundenziel erreicht!', mode.goal + ' richtige Bissen.');
       return;
     }
     task = deck[score];
     showTask();
-    timer = setTimeout(tick, readingMs);
+    timer = setTimeout(tick, mode.readingMs);
     return;
   }
 
   if (bite) {
     snake.pop();
+    points -= mistakePenalty;
+    streak = 0;
     const explanation = bite.form + ' steht hier für ' + describeForm(bite.form) + '. Gesucht ist ' + task.form + '.';
-    ui.feedback.textContent = 'Falscher Bissen. −1 Segment.';
+    ui.feedback.textContent = 'Falscher Bissen. −1 Segment und −40 Punkte.';
     if (!snake.length) {
       food = food.filter(cell => cell !== bite);
       draw();
-      showOverlay('lost', 'Runde beendet', 'Kein Segment mehr', explanation, 'Neue Runde', 'error');
+      finishRound('lost', 'Kein Segment mehr', explanation);
       return;
     }
     placeFood();
     draw();
-    showOverlay('mistake', '−1 Segment', 'Falscher Bissen', explanation, 'Erneut versuchen', 'error');
+    showOverlay('mistake', '−1 Segment · −40 Punkte', 'Falscher Bissen', explanation, 'Erneut versuchen', 'error');
     return;
   }
 
   draw();
-  timer = setTimeout(tick, stepMs);
+  timer = setTimeout(tick, mode.stepMs - score * mode.accelerationMs);
 }
 
 ui.action.addEventListener('click', () => {
   if (state === 'paused' || state === 'mistake') {
     if (state === 'mistake') ui.feedback.textContent = 'Die Aufgabe bleibt dieselbe.';
-    run(readingMs);
+    run(startDelayMs);
   } else {
     startRound();
   }
 });
 ui.pause.addEventListener('click', togglePause);
 ui.reset.addEventListener('click', startRound);
+for (const button of modeButtons) {
+  button.addEventListener('click', () => selectMode(button.dataset.mode));
+}
 for (const button of padButtons) {
   button.addEventListener('click', () => changeDirection(button.dataset.direction));
 }
@@ -643,6 +763,7 @@ document.addEventListener('keydown', event => {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && state === 'running') togglePause();
 });
+refreshBest();
 draw();
 </script>
 </body>
